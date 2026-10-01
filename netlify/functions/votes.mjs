@@ -22,16 +22,23 @@ export default async (req) => {
         });
 
         if (vote) {
-          votes.push(vote);
+          votes.push({
+            name: vote.name,
+            choice: vote.choice || vote.guess,
+            createdAt: vote.createdAt || 0
+          });
         }
       }
 
       votes.sort((a, b) => a.createdAt - b.createdAt);
 
-      return new Response(JSON.stringify(votes), {
-        status: 200,
-        headers
-      });
+      const girl = votes.filter(v => v.choice === "Girl").length;
+      const boy = votes.filter(v => v.choice === "Boy").length;
+
+      return new Response(
+        JSON.stringify({ girl, boy, votes }),
+        { status: 200, headers }
+      );
     }
 
     if (req.method === "POST") {
@@ -44,18 +51,20 @@ export default async (req) => {
 
       const body = await req.json();
       const name = String(body.name || "").trim().slice(0, 50);
-      const guess = String(body.guess || "").trim();
+      const choice = String(body.choice || "").trim();
 
-      if (!name || !["Girl", "Boy"].includes(guess)) {
+      if (!name || !["Girl", "Boy"].includes(choice)) {
         return new Response(
-          JSON.stringify({ error: "Please enter your name and choose Girl or Boy." }),
+          JSON.stringify({
+            error: "Please enter your name and choose Girl or Boy."
+          }),
           { status: 400, headers }
         );
       }
 
       const vote = {
         name,
-        guess,
+        choice,
         createdAt: Date.now()
       };
 
@@ -63,10 +72,10 @@ export default async (req) => {
 
       await store.setJSON(key, vote);
 
-      return new Response(JSON.stringify(vote), {
-        status: 201,
-        headers
-      });
+      return new Response(
+        JSON.stringify(vote),
+        { status: 201, headers }
+      );
     }
 
     return new Response(
