@@ -1,3 +1,87 @@
-import {getStore} from '@netlify/blobs';
-const store=getStore({name:'gender-reveal-votes',consistency:'strong'});const REVEAL=Date.parse('2026-10-07T03:00:00Z');
-export default async req=>{if(req.method==='GET'){let l=await store.list(),v=[];for(const b of l.blobs||[]){let x=await store.get(b.key,{type:'json'});if(x)v.push(x)}v.sort((a,b)=>a.createdAt-b.createdAt);return out({votes:v,girl:v.filter(x=>x.choice==='Girl').length,boy:v.filter(x=>x.choice==='Boy').length})}if(req.method==='POST'){if(Date.now()>=REVEAL)return out({error:'Voting is closed.'},403);let b;try{b=await req.json()}catch{return out({error:'Invalid request.'},400)}let name=String(b?.name||'').trim().slice(0,40),choice=b?.choice;if(!name)return out({error:'Please enter your name.'},400);if(!['Girl','Boy'].includes(choice))return out({error:'Please choose Girl or Boy.'},400);await store.set(`vote-${crypto.randomUUID()}`,JSON.stringify({name,choice,createdAt:Date.now()}),{contentType:'application/json'});return out({ok:true})}return out({error:'Method not allowed.'},405)};function out(x,s=200){return new Response(JSON.stringify(x),{status:s,headers:{'content-type':'application/json','cache-control':'no-store'}})}
+import { getStore } from "@netlify/blobs";
+
+const REVEAL_DATE = new Date("2026-10-07T03:00:00Z");
+
+export default async (req) => {
+  const headers = {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store"
+  };
+
+  try {
+    const store = getStore("gender-reveal-votes");
+
+    if (req.method === "GET") {
+      const { blobs } = await store.list();
+      const votes = [];
+
+      for (const blob of blobs) {
+        const vote = await store.get(blob.key, {
+          type: "json",
+          consistency: "strong"
+        });
+
+        if (vote) {
+          votes.push(vote);
+        }
+      }
+
+      votes.sort((a, b) => a.createdAt - b.createdAt);
+
+      return new Response(JSON.stringify(votes), {
+        status: 200,
+        headers
+      });
+    }
+
+    if (req.method === "POST") {
+      if (new Date() >= REVEAL_DATE) {
+        return new Response(
+          JSON.stringify({ error: "Voting is closed." }),
+          { status: 403, headers }
+        );
+      }
+
+      const body = await req.json();
+      const name = String(body.name || "").trim().slice(0, 50);
+      const guess = String(body.guess || "").trim();
+
+      if (!name || !["Girl", "Boy"].includes(guess)) {
+        return new Response(
+          JSON.stringify({ error: "Please enter your name and choose Girl or Boy." }),
+          { status: 400, headers }
+        );
+      }
+
+      const vote = {
+        name,
+        guess,
+        createdAt: Date.now()
+      };
+
+      const key = `${Date.now()}-${crypto.randomUUID()}`;
+
+      await store.setJSON(key, vote);
+
+      return new Response(JSON.stringify(vote), {
+        status: 201,
+        headers
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ error: "Method not allowed." }),
+      { status: 405, headers }
+    );
+
+  } catch (error) {
+    console.error("Vote function error:", error);
+
+    return new Response(
+      JSON.stringify({
+        error: "Could not load or save guesses right now."
+      }),
+      { status: 500, headers }
+    );
+  }
+};
